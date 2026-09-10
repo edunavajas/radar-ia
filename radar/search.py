@@ -154,3 +154,17 @@ def hybrid_search(
     vector_ids = _cosine_ids(conn, query_vec, model, candidates)
     fused = rrf([fts_ids, vector_ids])[:top_k]
     return hydrate(conn, fused)
+
+
+def keyword_search(
+    conn: sqlite3.Connection,
+    question: str,
+    top_k: int = 8,
+    filters: dict | None = None,
+) -> list[dict]:
+    """Búsqueda solo BM25, para cuando el proveedor de IA no está disponible."""
+    filters = filters or {}
+    candidates = _candidate_ids(conn, filters)
+    if candidates is not None and not candidates:
+        return []
+    return hydrate(conn, _fts_ids(conn, question, candidates)[:top_k])

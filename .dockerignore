@@ -1,0 +1,13 @@
+.git
+.venv
+venv
+__pycache__
+**/__pycache__
+.pytest_cache
+data
+node_modules
+frontend/node_modules
+radar/static
+samples/raw
+.env
+*.db
