@@ -62,9 +62,12 @@ detectada 4096) y cada búsqueda con respuesta cuesta **1 embedding + 1 chat**.
 
 ## Estado
 
-- El **parser de respuestas crudas** de Thordata está pendiente de los ficheros
-  reales en `samples/panel/`: el sistema no adivina su estructura y avisa con un
-  mensaje claro hasta que existan.
+- El resultado de `youtube_transcript_by-id` está **confirmado**: es una lista de
+  `{transcriptdownloadUrl, video_id, file_size, error, error_code}`. No trae la
+  transcripción, trae el enlace a un `.txt` (`radar/parsers.py`).
+- Falta el **formato interno de ese `.txt`** (y los ejemplos de
+  `youtube_product_by-id` y del descubrimiento). Hasta entonces el parser avisa
+  con un mensaje claro y no adivina la estructura.
 - Los spiders de **descubrimiento** están marcados `SIN CONFIRMAR EN PANEL` y
   aislados en `radar/spiders.py`.
 - El `seed/seed.jsonl` definitivo debe salir de una ejecución real de la ingesta.

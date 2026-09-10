@@ -3,34 +3,111 @@
 Hay dos entradas:
   * registros *canónicos* (`seed/seed.jsonl`, tests): formato estable definido
     aquí y en `models.py`.
-  * respuestas *crudas* de Thordata: su forma exacta todavía no está
-    confirmada porque faltan los ficheros de `samples/panel/`. Las funciones
-    `*_raw` están deliberadamente sin implementar: no se adivina la estructura.
-    Cuando existan los samples, se rellenan ÚNICAMENTE estas funciones.
+  * respuestas *crudas* de Thordata: se implementan contra la forma real que
+    confirma el panel, sin adivinar.
+
+Estado de la forma real (Thordata):
+  - Resultado de `youtube_transcript_by-id`: CONFIRMADO por el panel. Es una
+    lista de `{transcriptdownloadUrl, video_id, file_size, error, error_code}`.
+    NO trae la transcripción: trae el enlace a un fichero `.txt`.
+  - Formato interno de ese `.txt`: PENDIENTE. Falta un fichero real de
+    `samples/panel/`; no se adivina.
+  - `youtube_product_by-id` y descubrimiento: PENDIENTES de sus ejemplos.
 """
 
 from __future__ import annotations
+
+import re
+from dataclasses import dataclass
 
 from .models import Channel, Segment, TranscriptDoc, VideoMeta
 
 
 class ParserPendingError(RuntimeError):
-    """El parser crudo aún no está implementado (faltan samples/panel/)."""
+    """El parser aún no está implementado (faltan samples/panel/)."""
 
 
 _PENDING = (
-    "Parser pendiente: falta samples/panel/ con la respuesta real de Thordata. "
-    "Rellena esta función contra el JSON real; no adivines la estructura."
+    "Parser pendiente: falta en samples/panel/ el ejemplo real de esta respuesta "
+    "de Thordata. Rellena esta función contra el JSON real; no adivines la estructura."
+)
+
+_SUBTITLE_PENDING = (
+    "Formato del fichero de subtítulos (.txt) sin confirmar: el resultado JSON de "
+    "youtube_transcript_by-id solo trae el enlace (transcriptdownloadUrl); el texto "
+    "con sus tiempos viene dentro del .txt. Falta un fichero real en samples/panel/."
 )
 
 
 # --------------------------------------------------------------------------- #
-# Respuestas crudas de Thordata — SIN CONFIRMAR (dependen de samples/panel/)
+# Resultado de youtube_transcript_by-id — CONFIRMADO EN PANEL
 # --------------------------------------------------------------------------- #
 
 
-def transcript_from_raw(raw: dict) -> TranscriptDoc:
-    raise ParserPendingError(_PENDING)
+@dataclass
+class TranscriptTask:
+    video_id: str
+    download_url: str
+    file_size: float = 0.0
+    error: str = ""
+    error_code: str = ""
+
+
+def transcript_tasks_from_raw(raw) -> list[TranscriptTask]:
+    """Lista de tareas de subtítulos con su enlace de descarga.
+
+    Forma confirmada por el panel:
+    `[{"transcriptdownloadUrl": "...", "video_id": "...", "file_size": 0.36,
+       "error": "", "error_code": ""}, ...]`
+    """
+    records = raw
+    if isinstance(raw, dict):
+        for key in ("data", "result", "results"):
+            if isinstance(raw.get(key), list):
+                records = raw[key]
+                break
+    if not isinstance(records, list):
+        raise ParserPendingError(_PENDING)
+
+    tasks: list[TranscriptTask] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        url = record.get("transcriptdownloadUrl") or record.get("transcript_download_url")
+        video_id = record.get("video_id")
+        if not url or not video_id:
+            continue
+        tasks.append(
+            TranscriptTask(
+                video_id=str(video_id),
+                download_url=str(url),
+                file_size=float(record.get("file_size") or 0),
+                error=str(record.get("error") or ""),
+                error_code=str(record.get("error_code") or ""),
+            )
+        )
+    return tasks
+
+
+_SUBTITLE_NAME = re.compile(
+    r"(?P<video_id>[\w-]{6,})_(?P<lang>[\w-]+)\.(?:txt|vtt|srt)$", re.IGNORECASE
+)
+
+
+def subtitle_filename_parts(filename: str) -> tuple[str, str] | None:
+    """Extrae (video_id, lang) del nombre tipo `8RePenzQH80_en.txt` del panel."""
+    match = _SUBTITLE_NAME.search(filename)
+    return (match.group("video_id"), match.group("lang")) if match else None
+
+
+def subtitle_segments(content: str, video_id: str = "", lang: str = "") -> list[Segment]:
+    """Segmentos con tiempos a partir del `.txt` de subtítulos. PENDIENTE."""
+    raise ParserPendingError(_SUBTITLE_PENDING)
+
+
+# --------------------------------------------------------------------------- #
+# Respuestas crudas aún sin ejemplo: SIN CONFIRMAR
+# --------------------------------------------------------------------------- #
 
 
 def video_from_raw(raw: dict) -> VideoMeta:

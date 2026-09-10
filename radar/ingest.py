@@ -20,16 +20,21 @@ import yaml
 
 from . import db, spiders
 from .config import ROOT, Settings, get_settings
+from .models import TranscriptDoc
 from .parsers import (
     ParserPendingError,
     channel_from_record,
     discovery_from_raw,
-    transcript_from_raw,
+    subtitle_filename_parts,
+    subtitle_segments,
     transcript_from_record,
+    transcript_tasks_from_raw,
     video_from_raw,
     video_from_record,
 )
 from .thordata import CreditsExhausted, TaskTimeout, ThordataClient, ThordataError
+
+SUBTITLE_SUFFIXES = {".txt", ".vtt", ".srt"}
 
 
 @dataclass
@@ -70,36 +75,81 @@ def load_sources(path: Path | str = ROOT / "config" / "sources.yaml") -> dict:
 
 
 def ingest_from_samples(conn, samples_dir: Path, summary: Summary) -> Summary:
-    files = sorted(Path(samples_dir).glob("*.json"))
+    samples_dir = Path(samples_dir)
+    files = sorted(
+        path
+        for path in samples_dir.rglob("*")
+        if path.is_file() and path.name != ".gitkeep"
+    )
     if not files:
         summary.notes.append(
             f"No hay ficheros en {samples_dir}. Deja ahí los samples del panel."
         )
         return summary
     for path in files:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        kind = _guess_kind(path.name)
         try:
-            if kind == "transcript":
-                doc = transcript_from_raw(raw)
-                _store_transcript(conn, doc, path, summary)
-            elif kind == "video":
-                meta = video_from_raw(raw)
-                _store_video(conn, meta, summary)
+            if path.suffix.lower() in SUBTITLE_SUFFIXES:
+                _ingest_subtitle_sample(conn, path, summary)
+            elif path.suffix.lower() == ".json":
+                _ingest_json_sample(conn, path, summary)
             else:
                 summary.notes.append(f"{path.name}: tipo no reconocido, omitido")
         except ParserPendingError as exc:
             summary.notes.append(f"{path.name}: {exc}")
+        except (json.JSONDecodeError, OSError) as exc:
+            summary.notes.append(f"{path.name}: {exc}")
     return summary
 
 
-def _guess_kind(filename: str) -> str:
-    name = filename.lower()
-    if "transcript" in name or "subtitle" in name:
-        return "transcript"
-    if "product" in name or "video" in name or "meta" in name:
-        return "video"
-    return "unknown"
+def _ingest_json_sample(conn, path: Path, summary: Summary) -> None:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if _looks_like_transcript_result(raw):
+        for task in transcript_tasks_from_raw(raw):
+            subtitle = _find_subtitle_file(path.parent, task.video_id)
+            if subtitle:
+                _ingest_subtitle_sample(conn, subtitle, summary)
+            else:
+                summary.notes.append(
+                    f"{path.name}: {task.video_id} apunta a un .txt que no está en "
+                    f"{path.parent.name}/ (el JSON solo trae el enlace)"
+                )
+        return
+    _store_video(conn, video_from_raw(raw), summary)
+
+
+def _ingest_subtitle_sample(conn, path: Path, summary: Summary) -> None:
+    parts = subtitle_filename_parts(path.name)
+    if not parts:
+        summary.notes.append(f"{path.name}: no pude deducir video_id/idioma del nombre")
+        return
+    video_id, lang = parts
+    segments = subtitle_segments(
+        path.read_text(encoding="utf-8", errors="replace"), video_id, lang
+    )
+    doc = TranscriptDoc(
+        video_id=video_id, lang=lang, subtitle_type="auto_generated", segments=segments
+    )
+    _store_transcript(conn, doc, path, summary)
+
+
+def _find_subtitle_file(directory: Path, video_id: str) -> Path | None:
+    for candidate in sorted(directory.glob(f"{video_id}_*")):
+        if candidate.suffix.lower() in SUBTITLE_SUFFIXES:
+            return candidate
+    return None
+
+
+def _looks_like_transcript_result(raw) -> bool:
+    records = raw
+    if isinstance(raw, dict):
+        for key in ("data", "result", "results"):
+            if isinstance(raw.get(key), list):
+                records = raw[key]
+                break
+    return isinstance(records, list) and any(
+        isinstance(record, dict) and record.get("transcriptdownloadUrl")
+        for record in records
+    )
 
 
 def _store_video(conn, meta, summary: Summary) -> None:
@@ -259,8 +309,38 @@ def _ingest_video_live(conn, client, settings: Settings, video_id: str, summary:
         summary.requests += 1
         db.record_api_call(conn, "thordata", tr_req["spider_id"], tr_req, "ok")
         summary.thordata_calls += 1
-        doc = transcript_from_raw(json.loads(Path(raw).read_text(encoding="utf-8")))
-        _store_transcript(conn, doc, raw, summary)
+
+        # El JSON del panel no trae la transcripción: trae el enlace al .txt.
+        tasks = transcript_tasks_from_raw(
+            json.loads(Path(raw).read_text(encoding="utf-8"))
+        )
+        matched = next(
+            (t for t in tasks if t.video_id == video_id), tasks[0] if tasks else None
+        )
+        if matched is None:
+            summary.notes.append(f"{video_id}: sin enlace de subtítulos")
+            return
+        if matched.error:
+            summary.notes.append(
+                f"{video_id}: subtítulos con error {matched.error_code} {matched.error}".strip()
+            )
+            return
+
+        parts = subtitle_filename_parts(matched.download_url)
+        lang = parts[1] if parts else (meta.lang or "en")
+        subtitle_text = client.fetch_text(matched.download_url)
+        subtitle_path = settings.db_path.parent / "raw" / f"{video_id}_{lang}.txt"
+        subtitle_path.parent.mkdir(parents=True, exist_ok=True)
+        subtitle_path.write_text(subtitle_text, encoding="utf-8")
+
+        segments = subtitle_segments(subtitle_text, video_id, lang)
+        doc = TranscriptDoc(
+            video_id=video_id,
+            lang=lang,
+            subtitle_type="auto_generated",
+            segments=segments,
+        )
+        _store_transcript(conn, doc, subtitle_path, summary)
     except CreditsExhausted:
         raise
     except ParserPendingError:

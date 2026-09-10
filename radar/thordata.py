@@ -191,6 +191,9 @@ class ThordataClient:
         resp.raise_for_status()
         return resp.content
 
+    def fetch_text(self, url: str) -> str:
+        return self.fetch(url).decode("utf-8", "replace")
+
     def poll_and_save(
         self, tasks_id: str, raw_path: Path | str, type_: str = "json"
     ) -> Path:
