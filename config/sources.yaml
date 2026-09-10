@@ -1,0 +1,14 @@
+# Fuentes a recolectar con `make ingest` (modo --live).
+# Edita libremente: cada canal y cada keyword generan peticiones de descubrimiento.
+
+channels:
+  - url: https://www.youtube.com/@ejemplo/videos
+    lang: en
+    max_posts: 15
+
+keywords:
+  - query: "modelo lenguaje"
+    lang: es
+    upload_date: "This week"
+
+languages_fallback: [en-orig, en]
