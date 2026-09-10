@@ -1,0 +1,29 @@
+# Secrets — nunca se commitea
+.env
+
+# Base de datos local / SQLite
+data/
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Respuestas crudas cacheadas de las APIs
+samples/**
+!samples/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node / Vite
+node_modules/
+app/static/dist/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
