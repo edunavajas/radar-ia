@@ -26,9 +26,12 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent.parent
 SAMPLES = ROOT / "samples"
-ENDPOINT = "https://scraperapi.thordata.com/builder"
-# La doc oficial usa "www.youtube.com" en el ejemplo de subtitulos.
-SPIDER_NAME = "www.youtube.com"
+# Los scrapers de YouTube usan /video_builder, no /builder (la doc publica
+# esta desactualizada). La URL base es configurable porque varia por scraper.
+ENDPOINT = os.environ.get(
+    "THORDATA_BUILDER_URL", "https://scraperapi.thordata.com/video_builder"
+)
+SPIDER_NAME = "youtube.com"
 SPIDER_ID = "youtube_transcript_by-id"
 
 
@@ -45,15 +48,17 @@ def load_env(path: Path) -> None:
 
 
 def build_request(token: str, video_id: str, lang: str) -> Request:
+    universal: dict[str, str] = {"selected_only": "false"}
+    if lang:
+        universal["subtitles_language"] = lang
+        universal["subtitles_type"] = "auto_generated"
     form = {
         "spider_name": SPIDER_NAME,
         "spider_id": SPIDER_ID,
         "spider_parameters": json.dumps([{"video_id": video_id}]),
-        "spider_universal": json.dumps(
-            {"subtitles_language": lang, "subtitles_type": "auto_generated"}
-        ),
+        "spider_universal": json.dumps(universal),
         "spider_errors": "true",
-        "file_name": "{{TasksID}}",
+        "file_name": "{{VideoID}}",
     }
     return Request(
         ENDPOINT,
@@ -75,7 +80,7 @@ def main() -> int:
         return 2
 
     video_id = sys.argv[1] if len(sys.argv) > 1 else "8RePenzQH80"
-    lang = sys.argv[2] if len(sys.argv) > 2 else "en"
+    lang = sys.argv[2] if len(sys.argv) > 2 else ""
 
     print(f"POST {ENDPOINT}")
     print(f"  spider_id={SPIDER_ID}  video_id={video_id}  lang={lang}")
