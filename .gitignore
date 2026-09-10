@@ -9,19 +9,21 @@ data/
 *.db-shm
 *.db-wal
 
-# Respuestas crudas cacheadas de las APIs
-samples/**
-!samples/.gitkeep
+# Respuestas crudas descargadas de las APIs (cacheadas, no versionadas)
+samples/raw/**
+!samples/raw/.gitkeep
 
 # Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+.pytest_cache/
 
 # Node / Vite
 node_modules/
-app/static/dist/
+frontend/dist/
+radar/static/
 
 # Editor / OS
 .DS_Store

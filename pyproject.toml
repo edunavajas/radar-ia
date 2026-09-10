@@ -1,0 +1,9 @@
+[project]
+name = "radar-ia"
+version = "0.1.0"
+description = "Buscador de lo que se dice dentro de los vídeos de YouTube, en cualquier idioma."
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

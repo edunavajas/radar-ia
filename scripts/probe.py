@@ -25,7 +25,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent.parent
-SAMPLES = ROOT / "samples"
+SAMPLES = ROOT / "samples" / "raw"
 # Los scrapers de YouTube usan /video_builder, no /builder (la doc publica
 # esta desactualizada). La URL base es configurable porque varia por scraper.
 ENDPOINT = os.environ.get(
