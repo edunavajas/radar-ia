@@ -20,7 +20,7 @@ import yaml
 
 from . import db, spiders
 from .config import ROOT, Settings, get_settings
-from .models import TranscriptDoc
+from .models import TranscriptDoc, VideoMeta
 from .parsers import (
     ParserPendingError,
     channel_from_record,
@@ -123,6 +123,9 @@ def _ingest_subtitle_sample(conn, path: Path, summary: Summary) -> None:
         summary.notes.append(f"{path.name}: no pude deducir video_id/idioma del nombre")
         return
     video_id, lang = parts
+    if not db.video_exists(conn, video_id):
+        # El .vtt no trae metadatos; se crea la fila mínima y se enriquece luego.
+        db.upsert_video(conn, VideoMeta(video_id=video_id, lang=lang), None)
     segments = subtitle_segments(
         path.read_text(encoding="utf-8", errors="replace"), video_id, lang
     )

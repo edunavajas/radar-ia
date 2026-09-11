@@ -7,16 +7,17 @@ Hay dos entradas:
     confirma el panel, sin adivinar.
 
 Estado de la forma real (Thordata):
-  - Resultado de `youtube_transcript_by-id`: CONFIRMADO por el panel. Es una
-    lista de `{transcriptdownloadUrl, video_id, file_size, error, error_code}`.
-    NO trae la transcripción: trae el enlace a un fichero `.txt`.
-  - Formato interno de ese `.txt`: PENDIENTE. Falta un fichero real de
-    `samples/panel/`; no se adivina.
+  - Resultado de `youtube_transcript_by-id`: CONFIRMADO. Es una lista de
+    `{transcriptdownloadUrl, video_id, file_size, error, error_code}`. NO trae
+    la transcripción: trae el enlace a un fichero `.vtt` (WebVTT) público.
+  - Ese `.vtt`: CONFIRMADO con el fichero real de `samples/panel/`. El parser
+    está en `subtitle_segments`.
   - `youtube_product_by-id` y descubrimiento: PENDIENTES de sus ejemplos.
 """
 
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass
 
@@ -30,12 +31,6 @@ class ParserPendingError(RuntimeError):
 _PENDING = (
     "Parser pendiente: falta en samples/panel/ el ejemplo real de esta respuesta "
     "de Thordata. Rellena esta función contra el JSON real; no adivines la estructura."
-)
-
-_SUBTITLE_PENDING = (
-    "Formato del fichero de subtítulos (.txt) sin confirmar: el resultado JSON de "
-    "youtube_transcript_by-id solo trae el enlace (transcriptdownloadUrl); el texto "
-    "con sus tiempos viene dentro del .txt. Falta un fichero real en samples/panel/."
 )
 
 
@@ -95,14 +90,94 @@ _SUBTITLE_NAME = re.compile(
 
 
 def subtitle_filename_parts(filename: str) -> tuple[str, str] | None:
-    """Extrae (video_id, lang) del nombre tipo `8RePenzQH80_en.txt` del panel."""
+    """Extrae (video_id, lang) del nombre tipo `8RePenzQH80_en.vtt` del panel."""
     match = _SUBTITLE_NAME.search(filename)
     return (match.group("video_id"), match.group("lang")) if match else None
 
 
+# WebVTT: `HH:MM:SS.mmm` o `MM:SS.mmm` (la hora es opcional).
+_TS = r"(?:(\d{1,2}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})"
+_CUE_TIMING = re.compile(rf"^\s*{_TS}\s*-->\s*{_TS}(?:\s+.*)?$")
+# Timestamps por palabra tipo <00:00:01.234> y etiquetas inline <c>, </c>, <v Ana>.
+_INLINE_WORD_TS = re.compile(r"<\d{1,2}:\d{2}:\d{2}[.,]\d{1,3}>")
+_INLINE_TAG = re.compile(r"</?[^>]+>")
+
+
+def _groups_to_ms(groups: tuple) -> int:
+    hours, minutes, seconds, fraction = groups
+    ms = int(str(fraction).ljust(3, "0")[:3])
+    return ((int(hours or 0) * 60 + int(minutes)) * 60 + int(seconds)) * 1000 + ms
+
+
+def _parse_timing(line: str) -> tuple[int, int] | None:
+    match = _CUE_TIMING.match(line)
+    if not match:
+        return None
+    groups = match.groups()
+    return _groups_to_ms(groups[:4]), _groups_to_ms(groups[4:8])
+
+
+def _clean_cue_text(raw: str) -> str:
+    text = _INLINE_WORD_TS.sub("", raw)
+    text = _INLINE_TAG.sub("", text)
+    text = html.unescape(text).replace("\u200b", "")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _strip_overlap(previous: str, current: str) -> str:
+    """Quita del inicio de `current` el solape con el final de `previous`.
+
+    Los subtítulos automáticos de YouTube son de scroll: cada cue repite la(s)
+    línea(s) anterior(es). Sin esto el texto sale duplicado y los embeddings
+    quedan inservibles.
+    """
+    if not previous or not current:
+        return current
+    prev_words = previous.split()
+    cur_words = current.split()
+    for size in range(min(len(prev_words), len(cur_words)), 0, -1):
+        if prev_words[-size:] == cur_words[:size]:
+            return " ".join(cur_words[size:])
+    return current
+
+
 def subtitle_segments(content: str, video_id: str = "", lang: str = "") -> list[Segment]:
-    """Segmentos con tiempos a partir del `.txt` de subtítulos. PENDIENTE."""
-    raise ParserPendingError(_SUBTITLE_PENDING)
+    """Segmentos (start_ms, end_ms, text) a partir de un fichero WebVTT."""
+    lines = content.lstrip("\ufeff").splitlines()
+    segments: list[Segment] = []
+    previous = ""
+    index = 0
+    total = len(lines)
+    while index < total:
+        line = lines[index].strip()
+        if not line:
+            index += 1
+            continue
+        upper = line.upper()
+        if upper.startswith(("WEBVTT", "KIND:", "LANGUAGE:")):
+            index += 1
+            continue
+        if upper.startswith(("NOTE", "STYLE", "REGION")):
+            index += 1
+            while index < total and lines[index].strip():
+                index += 1
+            continue
+        timing = _parse_timing(line)
+        if timing is None:
+            index += 1  # identificador de cue u otra línea suelta
+            continue
+        start_ms, end_ms = timing
+        index += 1
+        raw_lines = []
+        while index < total and lines[index].strip():
+            raw_lines.append(lines[index])
+            index += 1
+        text = _strip_overlap(previous, _clean_cue_text(" ".join(raw_lines)))
+        if not text:
+            continue
+        segments.append(Segment(start_ms=start_ms, end_ms=end_ms, text=text))
+        previous = text
+    return segments
 
 
 # --------------------------------------------------------------------------- #

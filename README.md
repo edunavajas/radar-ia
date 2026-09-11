@@ -52,9 +52,13 @@ Tres capas separadas:
 ## Qué cuesta
 
 Coste dominante: **Thordata, 1 crédito por resultado** (cada vídeo descargado
-son ~2 resultados: metadatos + transcripción). El límite duro por ejecución se
-configura con `MAX_REQUESTS_PER_RUN` y la ingesta pide confirmación antes de
-gastar.
+son ~2 resultados: metadatos + transcripción). Una tarea real de 1 vídeo tardó
+~53 s y consumió 1 crédito. El límite duro por ejecución se configura con
+`MAX_REQUESTS_PER_RUN` y la ingesta pide confirmación antes de gastar.
+
+Los resultados de Thordata **caducan a los 30 días**, así que la ingesta
+persiste todo en local al momento (`samples/raw/` + SQLite) y nunca da por hecho
+que puede volver a pedirlo.
 
 Los embeddings son baratos: en una ejecución real de prueba, indexar 2 vídeos /
 3 fragmentos costó **1 petición de embeddings** (lote de 3 textos, dimensión
@@ -62,12 +66,13 @@ detectada 4096) y cada búsqueda con respuesta cuesta **1 embedding + 1 chat**.
 
 ## Estado
 
-- El resultado de `youtube_transcript_by-id` está **confirmado**: es una lista de
-  `{transcriptdownloadUrl, video_id, file_size, error, error_code}`. No trae la
-  transcripción, trae el enlace a un `.txt` (`radar/parsers.py`).
-- Falta el **formato interno de ese `.txt`** (y los ejemplos de
-  `youtube_product_by-id` y del descubrimiento). Hasta entonces el parser avisa
-  con un mensaje claro y no adivina la estructura.
+- `youtube_transcript_by-id` está **confirmado y funcionando**: devuelve una
+  lista de `{transcriptdownloadUrl, video_id, file_size, error, error_code}` con
+  el enlace a un `.vtt` público. El parser WebVTT (`radar/parsers.py`) ya maneja
+  cabecera, `NOTE`/`STYLE`/`REGION`, cue settings, etiquetas inline y
+  timestamps por palabra, y deduplica el solape de los subtítulos automáticos.
+- Faltan los ejemplos reales de **`youtube_product_by-id`** (metadatos) y del
+  **descubrimiento**: sus parsers siguen pendientes y no se adivinan.
 - Los spiders de **descubrimiento** están marcados `SIN CONFIRMAR EN PANEL` y
   aislados en `radar/spiders.py`.
 - El `seed/seed.jsonl` definitivo debe salir de una ejecución real de la ingesta.
