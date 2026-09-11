@@ -46,12 +46,11 @@ make index    # trocea + embeddings + FTS5
 Variables del arranque:
 
 - `RADAR_PORT` — puerto del host (por defecto `8000`). Ej.: `RADAR_PORT=8090 docker compose up`.
-- `RADAR_UID` / `RADAR_GID` — a quién pertenece `./data` (por defecto `1000:1000`).
 
 `data/` es local y **no viaja en el repo** (está en `.gitignore`): contiene la
 base de datos, los vectores y las respuestas crudas. El contenedor la crea e
-inicializa al arrancar y le da permisos del usuario del host, así que no quedan
-ficheros de root.
+inicializa al arrancar y la deja escribible, así que no quedan ficheros que solo
+pueda tocar root.
 
 ## Cómo funciona
 
