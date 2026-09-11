@@ -2,12 +2,11 @@ services:
   radar:
     build: .
     ports:
-      - "8000:8000"
+      - "${RADAR_PORT:-8000}:8000"
     env_file:
       - .env
     volumes:
-      - radar-data:/app/data
+      # Bind mount: usamos ./data tal cual, con los embeddings ya generados.
+      # Sobrevive a reinicios y lo comparten los comandos locales y Docker.
+      - ./data:/app/data
     restart: unless-stopped
-
-volumes:
-  radar-data:

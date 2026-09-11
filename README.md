@@ -24,8 +24,9 @@ cp .env.example .env    # rellena THORDATA_TOKEN, AI_API_BASE_URL y AI_API_KEY
 docker compose up
 ```
 
-Abre http://localhost:8000. La base de datos vive en un volumen, así que
-sobrevive a los reinicios.
+Abre http://localhost:8000 (o el puerto que pongas en `RADAR_PORT`). La base de
+datos vive en `./data` (bind mount): sobrevive a los reinicios y la comparten
+los comandos locales y los de Docker.
 
 Para ver la app con contenido:
 
