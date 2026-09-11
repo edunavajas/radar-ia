@@ -76,14 +76,17 @@ RSS y oEmbed van con caché en disco y medio segundo entre peticiones.
 
 ## Qué cuesta
 
-Coste dominante: **Thordata, 1 crédito por resultado** (cada vídeo descargado
-son ~2 resultados: metadatos + transcripción). Una tarea real de 1 vídeo tardó
-~53 s y consumió 1 crédito. El límite duro por ejecución se configura con
-`MAX_REQUESTS_PER_RUN` y la ingesta pide confirmación antes de gastar.
+Coste dominante: **Thordata, 1 crédito por transcripción**. El descubrimiento
+(RSS) y los metadatos (oEmbed) son gratis. Los vídeos sin subtítulos no generan
+resultado. En una ejecución real de 35 canales (últimos 7 días): 153 vídeos en
+ventana, **135 transcritos** (en=72, es=45, ko=16, ja=1, zh=1), 18 sin
+subtítulos, 71.446 segmentos, 2.296 chunks y **135 créditos**. Cada tarea tarda
+~53 s; con `--workers` se lanzan en paralelo.
 
 Los resultados de Thordata **caducan a los 30 días**, así que la ingesta
 persiste todo en local al momento (`samples/raw/` + SQLite) y nunca da por hecho
-que puede volver a pedirlo.
+que puede volver a pedirlo. Indexar esos 2.296 chunks son ~2.300 textos en
+embeddings por lotes con el proveedor de IA.
 
 Los embeddings son baratos: en una ejecución real de prueba, indexar 2 vídeos /
 3 fragmentos costó **1 petición de embeddings** (lote de 3 textos, dimensión

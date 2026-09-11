@@ -503,10 +503,7 @@ def _persist_transcript(
     if not db.video_exists(conn, doc.video_id):
         db.upsert_video(conn, meta, db.channel_id_for(conn, meta.channel_handle))
     if doc.lang:
-        conn.execute(
-            "UPDATE videos SET lang=COALESCE(NULLIF(lang,''), ?) WHERE video_id=?",
-            (doc.lang, doc.video_id),
-        )
+        conn.execute("UPDATE videos SET lang=? WHERE video_id=?", (doc.lang, doc.video_id))
     raw_path = settings.db_path.parent / "raw" / f"{doc.video_id}_{doc.lang}.vtt"
     db.save_transcript(
         conn,

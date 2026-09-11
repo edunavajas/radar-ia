@@ -47,10 +47,10 @@ class ThordataTranscriptSource:
                 tasks[0] if tasks else None,
             )
             if matched is None:
-                raise SourceError(f"{video_id}: sin enlace de subtítulos")
+                raise SourceError("sin enlace de subtítulos")
             if matched.error:
                 raise SourceError(
-                    f"{video_id}: subtítulos con error {matched.error_code} {matched.error}".strip()
+                    f"subtítulos con error {matched.error_code} {matched.error}".strip()
                 )
 
             parts = subtitle_filename_parts(matched.download_url)

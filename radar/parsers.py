@@ -85,7 +85,8 @@ def transcript_tasks_from_raw(raw) -> list[TranscriptTask]:
 
 
 _SUBTITLE_NAME = re.compile(
-    r"(?P<video_id>[\w-]{6,})_(?P<lang>[\w-]+)\.(?:txt|vtt|srt)$", re.IGNORECASE
+    r"(?P<video_id>[A-Za-z0-9_-]{11})_(?P<lang>[\w-]+?)(?:_subtitle)?\.(?:txt|vtt|srt)$",
+    re.IGNORECASE,
 )
 
 

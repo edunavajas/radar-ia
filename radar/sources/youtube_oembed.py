@@ -43,3 +43,6 @@ class YouTubeOEmbedMetadata:
             thumbnail_url=thumbnail,
             url=watch,
         )
+
+    def close(self) -> None:
+        self.http.close()

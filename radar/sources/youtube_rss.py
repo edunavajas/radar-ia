@@ -100,3 +100,6 @@ class YouTubeRSSDiscovery:
         if not channel_id:
             raise SourceError(f"No pude resolver el channel_id de {handle_or_url!r}")
         return channel_id
+
+    def close(self) -> None:
+        self.http.close()
