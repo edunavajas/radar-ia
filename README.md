@@ -19,30 +19,39 @@ No es un buscador de vídeos: cada resultado apunta a un instante concreto.
 
 ## Arranque
 
+En un clon limpio, tal cual:
+
 ```sh
 cp .env.example .env    # rellena THORDATA_TOKEN, AI_API_BASE_URL y AI_API_KEY
 docker compose up
 ```
 
-Abre http://localhost:8000 (o el puerto que pongas en `RADAR_PORT`). La base de
-datos vive en `./data` (bind mount): sobrevive a los reinicios y la comparten
-los comandos locales y los de Docker.
+Abre http://localhost:8000. La base de datos se crea sola en `./data` la primera
+vez.
 
-Para ver la app con contenido:
+Para ver la app con contenido, carga el seed incluido y genera sus embeddings:
 
 ```sh
-make seed     # carga seed/seed.jsonl (si existe) y lo indexa
-# o
-make ingest   # recolecta las fuentes de config/sources.yaml (gasta créditos)
+make seed
+```
+
+`make seed` es el paso normal para tener la app funcionando sin gastar créditos.
+Para recolectar contenido propio (gasta créditos de Thordata):
+
+```sh
+make ingest   # usa config/sources.yaml; pide confirmación antes de gastar
 make index    # trocea + embeddings + FTS5
 ```
 
-`make ingest` pide confirmación antes de gastar. Para ver el plan y el gasto
-previsto sin gastar nada:
+Variables del arranque:
 
-```sh
-python -m radar.ingest --live --dry-run
-```
+- `RADAR_PORT` — puerto del host (por defecto `8000`). Ej.: `RADAR_PORT=8090 docker compose up`.
+- `RADAR_UID` / `RADAR_GID` — a quién pertenece `./data` (por defecto `1000:1000`).
+
+`data/` es local y **no viaja en el repo** (está en `.gitignore`): contiene la
+base de datos, los vectores y las respuestas crudas. El contenedor la crea e
+inicializa al arrancar y le da permisos del usuario del host, así que no quedan
+ficheros de root.
 
 ## Cómo funciona
 
@@ -60,7 +69,9 @@ python -m radar.ingest --live --dry-run
   Título, canal y miniatura. Duración, vistas y likes **no existen** por esta
   vía: se quedan vacíos y la UI no los pinta, nunca ceros inventados.
 
-RSS y oEmbed van con caché en disco y medio segundo entre peticiones.
+RSS y oEmbed van con caché en disco y medio segundo entre peticiones. Todo vive
+en `radar/sources/` (un módulo por proveedor): cambiar de proveedor es cambiar
+una implementación y nada más.
 
 ### Capas
 
@@ -79,31 +90,31 @@ RSS y oEmbed van con caché en disco y medio segundo entre peticiones.
 
 Coste dominante: **Thordata, 1 crédito por transcripción**. El descubrimiento
 (RSS) y los metadatos (oEmbed) son gratis. Los vídeos sin subtítulos no generan
-resultado. En una ejecución real de 35 canales (últimos 7 días): 153 vídeos en
-ventana, **135 transcritos** (en=72, es=45, ko=16, ja=1, zh=1), 18 sin
-subtítulos, 71.446 segmentos, 2.296 chunks y **135 créditos**. Cada tarea tarda
-~53 s; con `--workers` se lanzan en paralelo.
+resultado.
 
-Los resultados de Thordata **caducan a los 30 días**, así que la ingesta
-persiste todo en local al momento (`samples/raw/` + SQLite) y nunca da por hecho
-que puede volver a pedirlo. Indexar esos 2.296 chunks son ~2.300 textos en
-embeddings por lotes con el proveedor de IA.
+Ejecución real de `config/sources.yaml` (35 canales, últimos 7 días):
 
-Los embeddings son baratos: en una ejecución real de prueba, indexar 2 vídeos /
-3 fragmentos costó **1 petición de embeddings** (lote de 3 textos, dimensión
-detectada 4096) y cada búsqueda con respuesta cuesta **1 embedding + 1 chat**.
+```
+canales:               35
+vídeos en ventana:     153
+transcritos:           135   (en=72, es=45, ko=16, ja=1, zh=1)
+sin subtítulos:         18
+segmentos:             71.446
+chunks:                2.296
+créditos gastados:     135
+tiempo total:          12m 12s  (8 workers; ~53 s por tarea)
+```
 
-## Estado
+Indexar esos 2.296 chunks son ~2.300 textos en embeddings por lotes con el
+proveedor de IA. Los resultados de Thordata **caducan a los 30 días**, así que la
+ingesta persiste todo en local al momento y nunca da por hecho que puede volver
+a pedirlo.
 
-- **Transcripciones**: Thordata `youtube_transcript_by-id` funcionando. El
-  parser WebVTT (`radar/parsers.py`) maneja cabecera, `NOTE`/`STYLE`/`REGION`,
-  cue settings, etiquetas inline, timestamps por palabra y deduplica el solape.
-- **Descubrimiento y metadatos**: los scrapers de Thordata están rotos por su
-  lado (404/520 desde su propio panel), así que se usan RSS y oEmbed públicos.
-  Todo está aislado en `radar/sources/` (un módulo por proveedor): si algún día
-  los arreglan, se cambia la implementación y nada más.
-- El `seed/seed.jsonl` se genera con `--write-seed` a partir de una ejecución
-  real de la ingesta.
+## El corpus local
+
+`data/` no se versiona. Para mover una base de datos ya construida entre
+máquinas, empaqueta `data/` y descomprímela en la raíz del repo, de forma que
+quede `./data`; el `docker compose up` la levantará con todo dentro.
 
 ## Tests
 

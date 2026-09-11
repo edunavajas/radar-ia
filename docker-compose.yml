@@ -5,8 +5,12 @@ services:
       - "${RADAR_PORT:-8000}:8000"
     env_file:
       - .env
+    environment:
+      # El contenedor cede la propiedad de ./data a este uid/gid del host.
+      RADAR_UID: "${RADAR_UID:-1000}"
+      RADAR_GID: "${RADAR_GID:-1000}"
     volumes:
-      # Bind mount: usamos ./data tal cual, con los embeddings ya generados.
-      # Sobrevive a reinicios y lo comparten los comandos locales y Docker.
+      # data/ es local y no viaja en el repo. Docker la crea vacía si no existe
+      # y el entrypoint la deja lista y con permisos del usuario del host.
       - ./data:/app/data
     restart: unless-stopped

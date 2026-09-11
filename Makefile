@@ -6,19 +6,24 @@ help:
 	@echo "Radar IA — objetivos:"
 	@echo "  build    compila el frontend (Vite) en radar/static"
 	@echo "  dev      backend local en http://localhost:8000"
-	@echo "  test     tests (pytest)"
+	@echo "  test     tests (pytest, crea .venv si falta)"
 	@echo "  up       docker compose up --build"
 	@echo "  seed     carga seed/seed.jsonl e indexa"
 	@echo "  ingest   recolecta con Thordata (gasta creditos)"
 	@echo "  index    trocea + embeddings + FTS5"
 
+.venv/.ready: requirements-dev.txt
+	python3 -m venv .venv
+	.venv/bin/pip install -q -r requirements-dev.txt
+	@touch .venv/.ready
+
 build:
 	cd frontend && npm install && npm run build
 
-dev: build
+dev: build .venv/.ready
 	.venv/bin/uvicorn radar.app:app --reload --port 8000
 
-test:
+test: .venv/.ready
 	.venv/bin/pytest -q
 
 up:
