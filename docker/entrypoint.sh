@@ -6,7 +6,7 @@ set -e
 
 DATA_DIR=/app/data
 mkdir -p "$DATA_DIR"
-chmod 0777 "$DATA_DIR" 2>/dev/null || true
+chmod -R a+rwX "$DATA_DIR" 2>/dev/null || true
 umask 000
 
 exec "$@"
