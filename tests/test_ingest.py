@@ -51,31 +51,62 @@ def test_from_samples_without_files_is_a_note_not_a_crash(tmp_path) -> None:
 
 
 def test_live_reports_credits_without_stacktrace(monkeypatch) -> None:
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
     from radar.config import get_settings
+    from radar.sources import VideoRef
     from radar.thordata import CreditsExhausted
 
-    class FakeClient:
-        def __init__(self, *args, **kwargs):
+    class FakeDiscovery:
+        def resolve_channel_id(self, target):
+            return "UC" + "x" * 22
+
+        def discover(self, channel):
+            return [
+                VideoRef(
+                    video_id="v1",
+                    title="t",
+                    published_at=datetime.now(timezone.utc).isoformat(),
+                )
+            ]
+
+        def close(self):
             pass
 
-        def __enter__(self):
-            return self
+    class FakeMetadata:
+        def fetch(self, video_id):
+            from radar.models import VideoMeta
 
-        def __exit__(self, *exc):
-            return None
+            return VideoMeta(video_id=video_id, title="t")
 
-        def launch(self, request):
+        def close(self):
+            pass
+
+    class FakeTranscript:
+        def fetch(self, video_id, lang=None):
             raise CreditsExhausted("La cuenta no tiene créditos de scraper.")
 
-    monkeypatch.setattr(ingest, "ThordataClient", FakeClient)
+    class FakeClient:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(ingest, "discovery_source", lambda settings: FakeDiscovery())
+    monkeypatch.setattr(ingest, "metadata_source", lambda settings: FakeMetadata())
+    monkeypatch.setattr(ingest, "transcript_source", lambda settings, client=None: FakeTranscript())
+    monkeypatch.setattr(ingest, "ThordataClient", lambda settings: FakeClient())
+
     conn = db.connect(":memory:")
     db.init_db(conn)
+    args = SimpleNamespace(
+        days=7, limit=10, dry_run=False, yes=True, workers=1, write_seed="", seed_count=0
+    )
     summary = ingest.ingest_live(
         conn,
         get_settings(load_dotenv=False),
-        {"channels": [{"url": "https://youtube.com/@x/videos", "max_posts": 1}]},
+        {"channels": [{"channel_id": "UC" + "x" * 22, "lang": "en"}]},
         ingest.Summary(),
-        assume_yes=True,
+        args,
     )
     assert any("créditos" in n for n in summary.notes)
 

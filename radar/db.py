@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS channels(
   handle TEXT UNIQUE,
   url TEXT,
   name TEXT,
-  lang TEXT
+  lang TEXT,
+  channel_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS videos(
@@ -29,6 +30,7 @@ CREATE TABLE IF NOT EXISTS videos(
   published_at TEXT,
   duration_s INTEGER,
   view_count INTEGER,
+  like_count INTEGER,
   lang TEXT,
   url TEXT,
   thumbnail_url TEXT,
@@ -102,7 +104,20 @@ def connect(db_path: Path | str) -> sqlite3.Connection:
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    _migrate(conn)
     conn.commit()
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, decl: str) -> None:
+    existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Añade columnas nuevas a bases de datos ya existentes sin perder datos."""
+    _ensure_column(conn, "channels", "channel_id", "TEXT")
+    _ensure_column(conn, "videos", "like_count", "INTEGER")
 
 
 def is_empty(conn: sqlite3.Connection) -> bool:
@@ -114,19 +129,35 @@ def is_empty(conn: sqlite3.Connection) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def upsert_channel(conn: sqlite3.Connection, handle: str, url: str, name: str, lang: str) -> int:
+def upsert_channel(
+    conn: sqlite3.Connection,
+    handle: str,
+    url: str,
+    name: str,
+    lang: str,
+    channel_id: str = "",
+) -> int:
     conn.execute(
         """
-        INSERT INTO channels(handle, url, name, lang) VALUES(?,?,?,?)
+        INSERT INTO channels(handle, url, name, lang, channel_id) VALUES(?,?,?,?,?)
         ON CONFLICT(handle) DO UPDATE SET
           url=COALESCE(NULLIF(excluded.url,''), channels.url),
           name=COALESCE(NULLIF(excluded.name,''), channels.name),
-          lang=COALESCE(NULLIF(excluded.lang,''), channels.lang)
+          lang=COALESCE(NULLIF(excluded.lang,''), channels.lang),
+          channel_id=COALESCE(NULLIF(excluded.channel_id,''), channels.channel_id)
         """,
-        (handle, url, name, lang),
+        (handle, url, name, lang, channel_id),
     )
     row = conn.execute("SELECT id FROM channels WHERE handle=?", (handle,)).fetchone()
     return int(row["id"])
+
+
+def channel_row(conn: sqlite3.Connection, handle: str):
+    return conn.execute("SELECT * FROM channels WHERE handle=?", (handle,)).fetchone()
+
+
+def set_channel_id(conn: sqlite3.Connection, handle: str, channel_id: str) -> None:
+    conn.execute("UPDATE channels SET channel_id=? WHERE handle=?", (channel_id, handle))
 
 
 def channel_id_for(conn: sqlite3.Connection, handle: str) -> int | None:
@@ -140,15 +171,17 @@ def upsert_video(conn: sqlite3.Connection, video, channel_id: int | None) -> Non
     conn.execute(
         """
         INSERT INTO videos(video_id, channel_id, title, description, published_at,
-                           duration_s, view_count, lang, url, thumbnail_url, fetched_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                           duration_s, view_count, like_count, lang, url,
+                           thumbnail_url, fetched_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(video_id) DO UPDATE SET
           channel_id=COALESCE(excluded.channel_id, videos.channel_id),
           title=COALESCE(NULLIF(excluded.title,''), videos.title),
           description=COALESCE(NULLIF(excluded.description,''), videos.description),
           published_at=COALESCE(NULLIF(excluded.published_at,''), videos.published_at),
-          duration_s=CASE WHEN excluded.duration_s>0 THEN excluded.duration_s ELSE videos.duration_s END,
-          view_count=CASE WHEN excluded.view_count>0 THEN excluded.view_count ELSE videos.view_count END,
+          duration_s=COALESCE(excluded.duration_s, videos.duration_s),
+          view_count=COALESCE(excluded.view_count, videos.view_count),
+          like_count=COALESCE(excluded.like_count, videos.like_count),
           lang=COALESCE(NULLIF(excluded.lang,''), videos.lang),
           url=COALESCE(NULLIF(excluded.url,''), videos.url),
           thumbnail_url=COALESCE(NULLIF(excluded.thumbnail_url,''), videos.thumbnail_url)
@@ -161,6 +194,7 @@ def upsert_video(conn: sqlite3.Connection, video, channel_id: int | None) -> Non
             video.published_at,
             video.duration_s,
             video.view_count,
+            video.like_count,
             video.lang,
             video.url,
             video.thumbnail_url,
@@ -181,6 +215,15 @@ def has_transcript(conn: sqlite3.Connection, video_id: str, lang: str, subtitle_
         conn.execute(
             "SELECT 1 FROM transcripts WHERE video_id=? AND lang=? AND subtitle_type=?",
             (video_id, lang, subtitle_type),
+        ).fetchone()
+        is not None
+    )
+
+
+def video_has_transcript(conn: sqlite3.Connection, video_id: str) -> bool:
+    return (
+        conn.execute(
+            "SELECT 1 FROM transcripts WHERE video_id=? LIMIT 1", (video_id,)
         ).fetchone()
         is not None
     )

@@ -1,14 +1,50 @@
-# Fuentes a recolectar con `make ingest` (modo --live).
-# Edita libremente: cada canal y cada keyword generan peticiones de descubrimiento.
+# Fuentes de descubrimiento: feed RSS público de YouTube (gratis, sin API key).
+# Cada canal admite `handle` (@nombre) o `channel_id` (UC...). Si pones handle,
+# Radar IA lo resuelve la primera vez y lo cachea en la tabla channels.
+# `lang` es el idioma esperado, útil para el seed y para el resumen.
+
+window_days: 7
 
 channels:
-  - url: https://www.youtube.com/@ejemplo/videos
-    lang: en
-    max_posts: 15
+  # --- Español ---
+  - { handle: "@midudev",             channel_id: UC8LeXCWOalN8SxlrPcG-PaQ, lang: es }
+  - { handle: "@mouredev",            channel_id: UCxPD7bsocoAMq8Dj18kmGyG, lang: es }
+  - { handle: "@platzi",              channel_id: UC55-mxUj5Nj3niXFReG44OQ, lang: es }
+  - { handle: "@FaztCode",            channel_id: UCMn28O1sQGochG94HdlthbA, lang: es }
+  - { handle: "@pildorasinformaticas", channel_id: UCdulIs-x_xrRd1ezwJZR9ww, lang: es }
+  - { handle: "@ManzDev",             channel_id: UCgZoKiTvvpEnr1zI6Kv_i7A, lang: es }
+  - { handle: "@CodigoFacilito",      channel_id: UCLXRGxAzeaLDGaOphqapzmg, lang: es }
+  - { handle: "@DevTalles",           channel_id: UCbIUE35mIBgbLY3sZJy2FZw, lang: es }
+  - { handle: "@hdeleonnet",          channel_id: UCDUdeFslCNoM29MAlZOfdWQ, lang: es }
 
-keywords:
-  - query: "modelo lenguaje"
-    lang: es
-    upload_date: "This week"
+  # --- Inglés ---
+  - { handle: "@Fireship",                  channel_id: UCsBjURrPoezykLs9EqgamOA, lang: en }
+  - { handle: "@TwoMinutePapers",           channel_id: UCbfYPyITQ-7l4upoX8nvctg, lang: en }
+  - { handle: "@veritasium",                channel_id: UCHnyfMqiRRG1u-2MsSQLbXA, lang: en }
+  - { handle: "@mkbhd",                     channel_id: UCBJycsmduvYEL83R_U4JriQ, lang: en }
+  - { handle: "@freecodecamp",              channel_id: UC8butISFwT-Wl7EV0hUK0BQ, lang: en }
+  - { handle: "@sentdex",                   channel_id: UCfzlCWGWYyIQ0aLC5w48gBQ, lang: en }
+  - { handle: "@matthew_berman",            channel_id: UCawZsQWqfGSbCI5yjkdVkTA, lang: en }
+  - { handle: "@aiexplained-official",      channel_id: UCNJ1Ymd5yFuUPtn21xtRbbw, lang: en }
+  - { handle: "@MachineLearningStreetTalk", channel_id: UCMLtBahI5DMrt0NPvDSoIRQ, lang: en }
+  - { handle: "@OpenAI",                    channel_id: UCXZCJLdBC09xxGZ6gcdrc6A, lang: en }
+  - { handle: "@GoogleDeepMind",            channel_id: UCP7jMXSY2xbc3KCAE0MHQ-A, lang: en }
+  - { handle: "@TechWithTim",               channel_id: UC4JX40jDee_tINbkjycV4Sg, lang: en }
+  - { handle: "@ArjanCodes",                channel_id: UCVhQ2NnY5Rskt6UjCUkJ_DA, lang: en }
+  - { handle: "@NeuralNine",                channel_id: UC8wZnXYK_CGKlBcZp-GxYPA, lang: en }
+  - { handle: "@statquest",                 channel_id: UCtYLUTtgS3k1Fg4y5tAhLbw, lang: en }
+  - { handle: "@IBMTechnology",             channel_id: UCKWaEZ-_VweaEx1j62do_vQ, lang: en }
+  - { handle: "@NVIDIADeveloper",           channel_id: UCBHcMCGaiJhv-ESTcWGJPcw, lang: en }
+  - { handle: "@DeepLearningAI",            channel_id: UCcIXc5mJsHVYTZR1maL5l9w, lang: en }
+  - { handle: "@1littlecoder",              channel_id: UCpV_X0VrL8-jg3t6wYGS-1g, lang: en }
+  - { handle: "@AllAboutAI",                channel_id: UCR9j1jqqB5Rse69wjUnbYwA, lang: en }
+
+  # --- Japonés / Coreano / Chino ---
+  - { handle: "@cookpad",     channel_id: UCv9C4ZK0bFVMGGCd3Wf_WhA, lang: ja }
+  - { handle: "@AIcia_Solid", channel_id: UC2lJYodMaAfFeFQrGUwhlaQ, lang: ja }
+  - { handle: "@jocoding",    channel_id: UCQNE2JmbasNYbjGAcuBiRRg, lang: ko }
+  - { handle: "@nomadcoders", channel_id: UCUpJs89fSBXNolQGOYKn0YQ, lang: ko }
+  - { handle: "@codingapple", channel_id: UCSLrpBAzr-ROVGHQ5EmxnUg, lang: ko }
+  - { handle: "@bestpartners", channel_id: UCGWYKICLOE8Wxy7q3eYXmPA, lang: zh }
 
 languages_fallback: [en-orig, en]

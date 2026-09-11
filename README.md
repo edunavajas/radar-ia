@@ -13,7 +13,9 @@ No es un buscador de vídeos: cada resultado apunta a un instante concreto.
   para dos cosas: los *embeddings* que entienden el contenido en cualquier
   idioma, y el LLM que redacta la respuesta en español.
 - Un **token de Thordata** — sirve para conseguir las transcripciones de YouTube
-  sin que YouTube te bloquee.
+  sin que YouTube te bloquee. Es lo único de pago del sistema.
+- El **descubrimiento** (RSS) y los **metadatos** (oEmbed) son gratis y no
+  necesitan credenciales.
 
 ## Arranque
 
@@ -30,20 +32,43 @@ Para ver la app con contenido:
 ```sh
 make seed     # carga seed/seed.jsonl (si existe) y lo indexa
 # o
-make ingest   # recolecta lo tuyo; edita antes config/sources.yaml
+make ingest   # recolecta las fuentes de config/sources.yaml (gasta créditos)
 make index    # trocea + embeddings + FTS5
+```
+
+`make ingest` pide confirmación antes de gastar. Para ver el plan y el gasto
+previsto sin gastar nada:
+
+```sh
+python -m radar.ingest --live --dry-run
 ```
 
 ## Cómo funciona
 
-Tres capas separadas:
+### Fuentes: una por proveedor, detrás de la misma interfaz
 
-1. **Ingesta** (`radar/ingest.py`) — habla con Thordata, descarga crudo a
-   `samples/raw/` y llena SQLite. Se ejecuta a mano. Nunca se vuelve a pedir un
-   `video_id` ya guardado.
-2. **Indexado** (`radar/index.py`) — trocea las transcripciones en fragmentos de
-   60–90 s con 15 s de solape, genera embeddings (multilingües) por lotes y
-   llena FTS5.
+- **Transcripciones — Thordata** (`youtube_transcript_by-id`, de pago, 1 crédito
+  por vídeo). Es la única vía sin alternativa gratuita para conseguir
+  transcripciones a escala sin que YouTube bloquee. Devuelve un enlace a un
+  `.vtt` que se descarga, se parsea y se persiste en local.
+- **Descubrimiento — RSS público de YouTube** (gratis, sin API key).
+  `feeds/videos.xml` da los últimos ~15 vídeos de un canal con id, título y
+  fecha. Si configuras un `@handle`, se resuelve a `channel_id` una vez y se
+  cachea en la tabla `channels`.
+- **Metadatos — oEmbed público de YouTube** (gratis, sin credenciales).
+  Título, canal y miniatura. Duración, vistas y likes **no existen** por esta
+  vía: se quedan vacíos y la UI no los pinta, nunca ceros inventados.
+
+RSS y oEmbed van con caché en disco y medio segundo entre peticiones.
+
+### Capas
+
+1. **Ingesta** (`radar/ingest.py`) — descubre por RSS, enriquece por oEmbed y
+   pide la transcripción a Thordata. Deduplica por `video_id` (nunca vuelve a
+   pedir un vídeo ya guardado) y persiste todo en local al momento, porque los
+   resultados de Thordata caducan. `--dry-run` enseña el gasto sin gastar.
+2. **Indexado** (`radar/index.py`) — trocea en fragmentos de 60–90 s con 15 s de
+   solape, genera embeddings por lotes y llena FTS5.
 3. **API + UI** (`radar/app.py` + `frontend/`) — busca solo sobre lo local:
    BM25 de FTS5 + similitud coseno, fusionados con Reciprocal Rank Fusion. El
    LLM redacta con citas; si falla o se desactiva (`RADAR_NO_LLM=1`), la búsqueda
@@ -66,16 +91,15 @@ detectada 4096) y cada búsqueda con respuesta cuesta **1 embedding + 1 chat**.
 
 ## Estado
 
-- `youtube_transcript_by-id` está **confirmado y funcionando**: devuelve una
-  lista de `{transcriptdownloadUrl, video_id, file_size, error, error_code}` con
-  el enlace a un `.vtt` público. El parser WebVTT (`radar/parsers.py`) ya maneja
-  cabecera, `NOTE`/`STYLE`/`REGION`, cue settings, etiquetas inline y
-  timestamps por palabra, y deduplica el solape de los subtítulos automáticos.
-- Faltan los ejemplos reales de **`youtube_product_by-id`** (metadatos) y del
-  **descubrimiento**: sus parsers siguen pendientes y no se adivinan.
-- Los spiders de **descubrimiento** están marcados `SIN CONFIRMAR EN PANEL` y
-  aislados en `radar/spiders.py`.
-- El `seed/seed.jsonl` definitivo debe salir de una ejecución real de la ingesta.
+- **Transcripciones**: Thordata `youtube_transcript_by-id` funcionando. El
+  parser WebVTT (`radar/parsers.py`) maneja cabecera, `NOTE`/`STYLE`/`REGION`,
+  cue settings, etiquetas inline, timestamps por palabra y deduplica el solape.
+- **Descubrimiento y metadatos**: los scrapers de Thordata están rotos por su
+  lado (404/520 desde su propio panel), así que se usan RSS y oEmbed públicos.
+  Todo está aislado en `radar/sources/` (un módulo por proveedor): si algún día
+  los arreglan, se cambia la implementación y nada más.
+- El `seed/seed.jsonl` se genera con `--write-seed` a partir de una ejecución
+  real de la ingesta.
 
 ## Tests
 

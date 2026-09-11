@@ -198,12 +198,19 @@ def discovery_from_raw(raw: dict) -> list[dict]:
 # --------------------------------------------------------------------------- #
 
 
+def _optional_int(value) -> int | None:
+    if value in (None, ""):
+        return None
+    return int(value)
+
+
 def channel_from_record(obj: dict) -> Channel:
     return Channel(
         handle=obj.get("handle", ""),
         url=obj.get("url", ""),
         name=obj.get("name", ""),
         lang=obj.get("lang", ""),
+        channel_id=obj.get("channel_id", ""),
     )
 
 
@@ -211,11 +218,13 @@ def video_from_record(obj: dict) -> VideoMeta:
     return VideoMeta(
         video_id=obj["video_id"],
         channel_handle=obj.get("channel_handle", ""),
+        channel_id=obj.get("channel_id", ""),
         title=obj.get("title", ""),
         description=obj.get("description", ""),
         published_at=obj.get("published_at", ""),
-        duration_s=int(obj.get("duration_s", 0) or 0),
-        view_count=int(obj.get("view_count", 0) or 0),
+        duration_s=_optional_int(obj.get("duration_s")),
+        view_count=_optional_int(obj.get("view_count")),
+        like_count=_optional_int(obj.get("like_count")),
         lang=obj.get("lang", ""),
         url=obj.get("url", ""),
         thumbnail_url=obj.get("thumbnail_url", ""),

@@ -1,7 +1,10 @@
 """Modelos canónicos que usa todo el sistema.
 
-El JSON crudo de las APIs se normaliza a estos tipos en `parsers.py`, de modo
-que cambiar un campo de la respuesta se toca en un único sitio.
+El JSON crudo de las APIs se normaliza a estos tipos en los parsers y fuentes,
+de modo que cambiar un campo se toca en un único sitio.
+
+`duration_s`, `view_count` y `like_count` son opcionales: la vía gratuita
+(oEmbed) no los da. Se dejan en `None`; nunca se inventan ni se ponen a cero.
 """
 
 from __future__ import annotations
@@ -11,21 +14,24 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Channel:
-    handle: str
-    url: str
+    handle: str = ""
+    url: str = ""
     name: str = ""
     lang: str = ""
+    channel_id: str = ""
 
 
 @dataclass
 class VideoMeta:
     video_id: str
     channel_handle: str = ""
+    channel_id: str = ""
     title: str = ""
     description: str = ""
     published_at: str = ""
-    duration_s: int = 0
-    view_count: int = 0
+    duration_s: int | None = None
+    view_count: int | None = None
+    like_count: int | None = None
     lang: str = ""
     url: str = ""
     thumbnail_url: str = ""
