@@ -40,25 +40,91 @@ function highlight(text, query) {
   )
 }
 
-function AnswerText({ text }) {
-  if (!text) return null
-  return (
-    <p className="whitespace-pre-wrap text-[15px] leading-7 text-slate-200">
-      {text.split(/(\[\d+\])/g).map((part, index) => {
-        const match = part.match(/^\[(\d+)\]$/)
-        if (!match) return part
+const CITE_CLASS =
+  'mx-0.5 rounded bg-radar-500/15 px-1.5 py-0.5 text-sm font-semibold text-radar-400 no-underline hover:bg-radar-500/25'
+
+function renderInline(text) {
+  // Negritas, cursivas, código y citas [n]. El LLM solo usa este subconjunto.
+  const pattern = /(\[\d+\]|\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`]+`)/g
+  return text
+    .split(pattern)
+    .filter((part) => part !== '')
+    .map((part, index) => {
+      const cite = part.match(/^\[(\d+)\]$/)
+      if (cite) {
         return (
-          <a
-            key={index}
-            href={`#r-${match[1]}`}
-            className="mx-0.5 rounded bg-radar-500/15 px-1.5 py-0.5 text-sm font-semibold text-radar-400 no-underline hover:bg-radar-500/25"
-          >
+          <a key={index} href={`#r-${cite[1]}`} className={CITE_CLASS}>
             {part}
           </a>
         )
-      })}
-    </p>
-  )
+      }
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={index} className="font-semibold text-slate-100">{part.slice(2, -2)}</strong>
+      }
+      if (part.startsWith('`') && part.endsWith('`')) {
+        return <code key={index} className="rounded bg-white/10 px-1 py-0.5 text-sm">{part.slice(1, -1)}</code>
+      }
+      if (part.startsWith('*') && part.endsWith('*')) {
+        return <em key={index}>{part.slice(1, -1)}</em>
+      }
+      return part
+    })
+}
+
+function AnswerText({ text }) {
+  if (!text) return null
+  const blocks = []
+  let list = null
+  const flushList = () => {
+    if (!list) return
+    const Tag = list.tag
+    blocks.push(
+      <Tag
+        key={`list-${blocks.length}`}
+        className={`ml-5 space-y-1 marker:text-radar-400 ${Tag === 'ol' ? 'list-decimal' : 'list-disc'}`}
+      >
+        {list.items.map((item, index) => (
+          <li key={index}>{item}</li>
+        ))}
+      </Tag>,
+    )
+    list = null
+  }
+
+  text.split('\n').forEach((rawLine, lineIndex) => {
+    const line = rawLine.trim()
+    if (!line) {
+      flushList()
+      return
+    }
+    const bullet = line.match(/^[-*+]\s+(.*)$/)
+    const numbered = line.match(/^\d+[.)]\s+(.*)$/)
+    if (bullet || numbered) {
+      const tag = bullet ? 'ul' : 'ol'
+      if (!list || list.tag !== tag) {
+        flushList()
+        list = { tag, items: [] }
+      }
+      list.items.push(renderInline((bullet || numbered)[1]))
+      return
+    }
+    flushList()
+    const heading = line.match(/^#{1,6}\s+(.*)$/)
+    if (heading) {
+      blocks.push(
+        <h3 key={`h-${lineIndex}`} className="pt-1 text-sm font-semibold uppercase tracking-wide text-radar-400">
+          {renderInline(heading[1])}
+        </h3>,
+      )
+      return
+    }
+    blocks.push(
+      <p key={`p-${lineIndex}`}>{renderInline(line)}</p>,
+    )
+  })
+  flushList()
+
+  return <div className="space-y-2 text-[15px] leading-7 text-slate-200">{blocks}</div>
 }
 
 function ResultCard({ item, query, translated }) {
