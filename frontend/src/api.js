@@ -21,3 +21,8 @@ export function search({ q, lang, channel, publishedAfter, limit = 8 }) {
 export function getWeek(days = 7) {
   return getJson(`/api/week?days=${days}`)
 }
+
+export function getAnswer({ q, limit = 8 }) {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  return getJson(`/api/answer?${params.toString()}`)
+}

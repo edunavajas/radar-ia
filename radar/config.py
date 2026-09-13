@@ -34,6 +34,7 @@ class Settings:
     builder_url: str
     download_url: str
     no_llm: bool
+    disable_reasoning: bool
 
 
 def get_settings(load_dotenv: bool = True) -> Settings:
@@ -56,4 +57,6 @@ def get_settings(load_dotenv: bool = True) -> Settings:
             "https://openapi.thordata.com/api/web-scraper-api/tasks-download",
         ),
         no_llm=os.environ.get("RADAR_NO_LLM", "").lower() in {"1", "true", "yes"},
+        disable_reasoning=os.environ.get("RADAR_DISABLE_REASONING", "1").lower()
+        not in {"0", "false", "no"},
     )

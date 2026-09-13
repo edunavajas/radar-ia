@@ -1,7 +1,14 @@
-"""API FastAPI + servido del frontend compilado en el mismo contenedor."""
+"""API FastAPI + servido del frontend compilado en el mismo contenedor.
+
+La búsqueda está partida en dos para que los resultados salgan al instante:
+  - GET /api/search  -> resultados (BM25 + coseno), sin LLM. Rápido.
+  - GET /api/answer  -> redactado con citas y traducción de fragmentos (LLM).
+El frontend pinta primero los resultados y luego rellena la respuesta.
+"""
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI, Query
@@ -9,7 +16,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db
-from .ai import AIClient, AIError
+from .ai import AIError, get_client
 from .answer import synthesize, translate_snippets
 from .config import Settings, get_settings
 from .search import hybrid_search, keyword_search
@@ -49,6 +56,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             conn.close()
 
+    def filters_from(lang: str, channel: str, published_after: str) -> dict:
+        return {
+            key: value
+            for key, value in {
+                "lang": lang,
+                "channel": channel,
+                "published_after": published_after,
+            }.items()
+            if value
+        }
+
+    def run_search(conn, query: str, filters: dict, limit: int) -> list[dict]:
+        try:
+            ai = get_client(settings)
+            model = ai.resolve_embedding()
+        except AIError:
+            return keyword_search(conn, query, top_k=limit, filters=filters)
+        return hybrid_search(conn, ai, query, model, top_k=limit, filters=filters)
+
     @app.get("/api/search")
     def search(
         q: str = Query(..., min_length=1),
@@ -60,52 +86,51 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         conn = open_conn()
         try:
             if db.is_empty(conn):
-                return {
-                    "query": q,
-                    "empty": True,
-                    "answer": None,
-                    "llm": False,
-                    "results": [],
-                    "notice": EMPTY_NOTICE,
-                }
-            filters = {
-                key: value
-                for key, value in {
-                    "lang": lang,
-                    "channel": channel,
-                    "published_after": published_after,
-                }.items()
-                if value
-            }
+                return {"query": q, "empty": True, "results": [], "notice": EMPTY_NOTICE}
+            results = run_search(conn, q, filters_from(lang, channel, published_after), limit)
+            return {"query": q, "empty": False, "results": results}
+        finally:
+            conn.close()
 
-            ai = None
-            model = ""
+    @app.get("/api/answer")
+    def answer(
+        q: str = Query(..., min_length=1),
+        limit: int = 8,
+    ) -> dict:
+        if settings.no_llm:
+            return {"query": q, "answer": None, "llm": False, "translations": {}}
+        conn = open_conn()
+        try:
+            if db.is_empty(conn):
+                return {"query": q, "answer": None, "llm": False, "translations": {}}
+            results = run_search(conn, q, {}, limit)
             try:
-                ai = AIClient(settings)
-                model = ai.resolve_embedding()
-            except AIError:
-                ai = None  # seguimos con BM25
-
-            if ai is not None:
-                results = hybrid_search(conn, ai, q, model, top_k=limit, filters=filters)
-            else:
-                results = keyword_search(conn, q, top_k=limit, filters=filters)
-
-            answer = None
-            if ai is not None and not settings.no_llm:
+                ai = get_client(settings)
                 chat_model = ai.resolve_chat()
-                answer = synthesize(q, results, ai, chat_model)
-                translations = translate_snippets(results, ai, chat_model)
-                for item in results:
-                    if item["chunk_id"] in translations:
-                        item["translated"] = translations[item["chunk_id"]]
-
+            except AIError:
+                return {"query": q, "answer": None, "llm": False, "translations": {}}
+            # La redacción y la traducción son independientes: en paralelo.
+            text = None
+            translations: dict[str, str] = {}
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                drafting = pool.submit(synthesize, q, results, ai, chat_model)
+                translating = pool.submit(translate_snippets, results, ai, chat_model)
+                try:
+                    text = drafting.result()
+                except Exception:  # noqa: BLE001
+                    text = None
+                if text:
+                    try:
+                        translations = {
+                            str(k): v for k, v in translating.result().items()
+                        }
+                    except Exception:  # noqa: BLE001
+                        translations = {}
             return {
                 "query": q,
-                "empty": False,
-                "answer": answer,
-                "llm": bool(answer),
-                "results": results,
+                "answer": text,
+                "llm": bool(text),
+                "translations": translations,
             }
         finally:
             conn.close()

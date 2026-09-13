@@ -29,7 +29,7 @@ class FakeAI:
 
 
 def build_client(tmp_path, monkeypatch, *, seeded: bool, recent: bool = False):
-    monkeypatch.setattr("radar.app.AIClient", FakeAI)
+    monkeypatch.setattr("radar.app.get_client", lambda settings: FakeAI())
     settings = replace(get_settings(load_dotenv=False), db_path=tmp_path / "radar.db")
     if seeded:
         conn = db.connect(settings.db_path)
@@ -71,13 +71,19 @@ def test_empty_db_shows_notice(tmp_path, monkeypatch):
     assert response["results"] == []
 
 
-def test_search_returns_results_and_answer(tmp_path, monkeypatch):
+def test_search_returns_results_fast(tmp_path, monkeypatch):
     client = build_client(tmp_path, monkeypatch, seeded=True)
     body = client.get("/api/search", params={"q": "inteligencia"}).json()
     assert body["results"]
     assert body["results"][0]["video_id"] == "v1"
     assert body["results"][0]["start_label"] == "0:00"
+
+
+def test_answer_endpoint_drafts_with_citations(tmp_path, monkeypatch):
+    client = build_client(tmp_path, monkeypatch, seeded=True)
+    body = client.get("/api/answer", params={"q": "inteligencia"}).json()
     assert body["answer"] == "Respuesta con cita [1]."
+    assert body["llm"] is True
 
 
 def test_week_returns_topics_when_recent(tmp_path, monkeypatch):

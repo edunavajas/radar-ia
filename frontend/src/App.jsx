@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getStats, search as apiSearch, getWeek } from './api'
+import { getStats, search as apiSearch, getWeek, getAnswer } from './api'
 
 const LANG_LABEL = {
   es: 'ES',
@@ -61,10 +61,10 @@ function AnswerText({ text }) {
   )
 }
 
-function ResultCard({ item, query }) {
+function ResultCard({ item, query, translated }) {
   const [showOriginal, setShowOriginal] = useState(false)
-  const translated = item.translated && item.translated !== item.text
-  const snippet = translated && !showOriginal ? item.translated : item.text
+  const isTranslated = Boolean(translated) && translated !== item.text
+  const snippet = isTranslated && !showOriginal ? translated : item.text
 
   return (
     <article id={`r-${item.rank}`} className="card scroll-mt-24 overflow-hidden transition hover:border-radar-500/40">
@@ -104,7 +104,7 @@ function ResultCard({ item, query }) {
             >
               ▶ Ver en {item.start_label}
             </a>
-            {translated && (
+            {isTranslated && (
               <button
                 onClick={() => setShowOriginal((value) => !value)}
                 className="text-xs text-slate-500 underline decoration-dotted hover:text-slate-300"
@@ -230,6 +230,9 @@ export default function App() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [answer, setAnswer] = useState(null)
+  const [translations, setTranslations] = useState({})
+  const [answerLoading, setAnswerLoading] = useState(false)
 
   useEffect(() => {
     getStats()
@@ -241,13 +244,29 @@ export default function App() {
     setLoading(true)
     setError('')
     setSubmitted(value)
+    setAnswer(null)
+    setTranslations({})
+    setAnswerLoading(true)
     try {
-      setData(await apiSearch({ q: value }))
+      const payload = await apiSearch({ q: value })
+      setData(payload)
+      setLoading(false)
+      if (payload.empty || !(payload.results || []).length) {
+        setAnswerLoading(false)
+        return
+      }
+      getAnswer({ q: value })
+        .then((res) => {
+          setAnswer(res.answer)
+          setTranslations(res.translations || {})
+        })
+        .catch(() => {})
+        .finally(() => setAnswerLoading(false))
     } catch (err) {
       setError(err.message)
       setData(null)
-    } finally {
       setLoading(false)
+      setAnswerLoading(false)
     }
   }
 
@@ -337,15 +356,22 @@ export default function App() {
             <Skeleton />
           ) : data ? (
             <div className="space-y-5">
-              {data.answer && (
+              {answerLoading ? (
                 <div className="card border-radar-500/20 p-5">
                   <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-radar-400">
                     Respuesta
                   </div>
-                  <AnswerText text={data.answer} />
+                  <p className="animate-pulse text-sm text-slate-500">Redactando…</p>
                 </div>
-              )}
-              {!data.answer && results.length > 0 && (
+              ) : answer ? (
+                <div className="card border-radar-500/20 p-5">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-radar-400">
+                    Respuesta
+                  </div>
+                  <AnswerText text={answer} />
+                </div>
+              ) : null}
+              {!answerLoading && !answer && results.length > 0 && (
                 <p className="text-xs text-slate-500">
                   Resultados sin redactar (LLM desactivado o no disponible).
                 </p>
@@ -355,7 +381,14 @@ export default function App() {
                   Sin resultados para «{data.query}». Prueba con otras palabras.
                 </div>
               ) : (
-                results.map((item) => <ResultCard key={item.chunk_id} item={item} query={submitted} />)
+                results.map((item) => (
+                  <ResultCard
+                    key={item.chunk_id}
+                    item={item}
+                    query={submitted}
+                    translated={translations[item.chunk_id]}
+                  />
+                ))
               )}
             </div>
           ) : (
